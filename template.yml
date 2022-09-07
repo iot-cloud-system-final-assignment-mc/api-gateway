@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Iot-Cloud-Systems Final Assignment - Marco Cavalli
+
+Parameters:
+  ApiKeyAdminParameter:
+    Type: String
+    Default: 9a7743fa-3ae7-11eb-adc1-0242ac120002
+  ApiKeyUserParameter:
+    Type: String
+    Default: 88b43c36-802e-11eb-af35-38f9d35b2c15
+  StageName:
+    Type: String
+    Default: prod
+  GetProductsFunctionName:
+    Type: String
+    Default: GetProducts
+  GetProductsLambdaExecutionRole:
+    Type: String
+    Default: iot-get-products-role
+
+Resources:
+  ApiGateway:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: apigateway.yml
+      Parameters:
+        ApiKeyAdminParameter: !Ref ApiKeyAdminParameter
+        ApiKeyUserParameter: !Ref ApiKeyUserParameter
+        StageName: !Ref StageName
+        GetProductsFunctionName: !Ref GetProductsFunctionName
+        GetProductsLambdaExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${GetProductsLambdaExecutionRole}
+
+  ApiGatewayPermissions:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: apigateway_permissions.yml
+      Parameters:       
+        ApiGatewayApi: !GetAtt ApiGateway.Outputs.ApiGatewayApi
+        GetProductsFunctionName: !Ref GetProductsFunctionName
+
+
+Outputs:
+  ApiURL:
+    Description: "API Gateway endpoint URL for API"
+    Value: !Join ["", ["https://", !GetAtt ApiGateway.Outputs.ApiGatewayApi, ".execute-api.", !Ref "AWS::Region", ".amazonaws.com/", !Ref StageName, "/"]]
+    Export:
+      Name: "Cloud-Systems-IoT-ApiURL"

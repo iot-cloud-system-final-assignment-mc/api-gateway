@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "api-gateway-test"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-11otlm1qgtcw0"
+s3_prefix = "api-gateway-test"
+region = "eu-west-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "ApiKeyAdminParameter=\"9a7743fa-3ae7-11eb-adc1-0242ac120002\" ApiKeyUserParameter=\"88b43c36-802e-11eb-af35-38f9d35b2c15\" StageName=\"prod\" GetProductsFunctionName=\"GetProducts\" GetProductsLambdaExecutionRoleArn=\"iot-get-products-role\""
+image_repositories = []
