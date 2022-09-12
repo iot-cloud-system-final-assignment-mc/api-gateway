@@ -12,24 +12,74 @@ Parameters:
   StageName:
     Type: String
     Default: prod
+  AuthLambdaFunctionName:
+    Type: String
+    Default: AuthLambda
   GetProductsFunctionName:
     Type: String
     Default: GetProducts
   UpsertProductFunctionName:
     Type: String
     Default: UpsertProduct
+  GetOrdersFunctionName:
+    Type: String
+    Default: GetOrders
+  UpsertOrderFunctionName:
+    Type: String
+    Default: UpsertOrder
 
 Resources:
+  ApiGatewayCloudWatchLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub apigateway-cloudwatch-publish-role-${AWS::Region}
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  ApiGatewayAttachCloudwatchLogArn:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchLogRole.Arn
   # API
+  ApiGatewayAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/api-gateway/iot-cloud-systems-final-assignment
+      RetentionInDays: 30
+      
   ApiGatewayApi:
     Type: AWS::Serverless::Api
+    DependsOn: ApiGatewayAttachCloudwatchLogArn
     Properties:
+      MethodSettings:
+        - DataTraceEnabled: False
+          LoggingLevel: INFO
+          MetricsEnabled: True
+          ResourcePath: "/*"
+          HttpMethod: "*"
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayAccessLogs.Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user","requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath", "status":"$context.status","protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+      TracingEnabled: True
       DefinitionBody:
         openapi: 3.0.1
         info:
           title: !Join ["", ["iot-cloud-systems-", !Ref "AWS::Region"]]
         basePath: !Join ["", ["/", !Ref StageName]]
         x-amazon-apigateway-api-key-source: "AUTHORIZER"
+        DefaultAuthorizer: LambdaTokenAuthorizer
+        Authorizers:
+          LambdaTokenAuthorizer:
+            FunctionArn: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AuthLambdaFunctionName}
         schemes:
           - https
         paths:
@@ -40,6 +90,8 @@ Resources:
               produces:
                 - application/json
               responses: {}
+              security:
+                - Authorizer: []
               x-amazon-apigateway-integration:
                 uri: !Join
                   - ""
@@ -121,6 +173,109 @@ Resources:
                 requestTemplates:
                   application/json: '{"statusCode": 200}'
                 type: mock
+          /orders:
+            get:
+              summary: Returns all orders
+              description: Returns all orders
+              produces:
+                - application/json
+              responses: {}
+              x-amazon-apigateway-integration:
+                uri: !Join
+                  - ""
+                  - - !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/
+                    - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${GetOrdersFunctionName}
+                    - /invocations
+                httpMethod: POST
+                type: aws_proxy
+            options:
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              responses:
+                "200":
+                  description: 200 response
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                passthroughBehavior: when_no_match
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                type: mock
+          /order:
+            post:
+              summary: Upsert a order
+              description: Upsert a order
+              produces:
+                - application/json
+              responses: {}
+              x-amazon-apigateway-integration:
+                uri: !Join
+                  - ""
+                  - - !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/
+                    - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${UpsertOrderFunctionName}
+                    - /invocations
+                httpMethod: POST
+                type: aws_proxy
+            options:
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              responses:
+                "200":
+                  description: 200 response
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                passthroughBehavior: when_no_match
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                type: mock
+        components:
+          securitySchemes:
+            Authorizer:
+              type: "apiKey"
+              name: "Authorization"
+              in: "header"
+              x-amazon-apigateway-authtype: "custom"
+              x-amazon-apigateway-authorizer:
+                authorizerUri: !Join
+                  - ""
+                  - - !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/
+                    - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AuthLambdaFunctionName}
+                    - /invocations
+                authorizerResultTtlInSeconds: 30
+                type: "token"
       StageName: prod
 
   # PERMISSIONS
@@ -137,6 +292,22 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref UpsertProductFunctionName
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join ["", ["arn:aws:execute-api:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", !Ref ApiGatewayApi, "/*/*/*" ]]
+
+  GetOrdersLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GetOrdersFunctionName
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join ["", ["arn:aws:execute-api:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", !Ref ApiGatewayApi, "/*/*/*" ]]
+
+  UpsertOrderLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UpsertOrderFunctionName
       Principal: apigateway.amazonaws.com
       SourceArn: !Join ["", ["arn:aws:execute-api:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId", ":", !Ref ApiGatewayApi, "/*/*/*" ]]
 
